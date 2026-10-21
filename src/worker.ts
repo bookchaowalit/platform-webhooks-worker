@@ -1,6 +1,9 @@
 // Signed inbound webhook receiver for hooks.bookchaowalit.com.
 // Slice: Stripe only. Raw events land in R2 (bronze) before anything else.
 
+import * as Sentry from '@sentry/cloudflare';
+import { sentryOptions } from './sentry.js';
+
 export interface R2BucketLike {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
 }
@@ -10,6 +13,7 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET?: string;
   FORWARD_URL?: string;
   FORWARD_TOKEN?: string;
+  SENTRY_DSN?: string;
 }
 
 export interface ExecutionContextLike {
@@ -163,8 +167,9 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
   return reject(404, 'not_found');
 }
 
-export default {
+// Uncaught errors reach Sentry when SENTRY_DSN is set (errors only; see src/sentry.ts).
+export default Sentry.withSentry((env: Env) => sentryOptions(env), {
   fetch(request: Request, env: Env, ctx: ExecutionContextLike): Promise<Response> {
     return handleRequest(request, env, ctx);
   },
-};
+});

@@ -1,6 +1,8 @@
 name = "solo-empire-hooks"
 main = "src/worker.ts"
 compatibility_date = "2026-10-04"
+# @sentry/cloudflare needs AsyncLocalStorage.
+compatibility_flags = ["nodejs_als"]
 account_id = "4a3ba0eee7dba5c9131a0d1ad3639114"
 workers_dev = true
 
@@ -20,3 +22,4 @@ bucket_name = "solo-empire-hooks"
 #   STRIPE_WEBHOOK_SECRET  required, Stripe endpoint signing secret
 #   FORWARD_URL            optional, receiver for minimal event summaries
 #   FORWARD_TOKEN          optional, bearer credential for FORWARD_URL
+#   SENTRY_DSN             optional, error reporting (unset = off; errors only, see src/sentry.ts)

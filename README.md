@@ -16,6 +16,9 @@ Current slice: **Stripe only**. LINE, GitHub, and iPaaS sources are future slice
 
 - Body limit: 256 KB (`413` above it).
 - Missing `STRIPE_WEBHOOK_SECRET` → `503` (no event accepted unverified).
+- Errors: when the `SENTRY_DSN` secret is set, uncaught errors go to Sentry
+  (`@sentry/cloudflare`, errors only: no tracing, breadcrumbs, request, headers,
+  body or user; see `src/sentry.ts`). Unset = off.
 - Optional forward: when both `FORWARD_URL` and `FORWARD_TOKEN` are set, a
   minimal summary `{id,type,amount,currency,created,livemode,payment_link}` is
   POSTed with a bearer credential through `ctx.waitUntil`. It is best effort and never
@@ -52,6 +55,8 @@ npx wrangler r2 bucket create solo-empire-hooks
    # optional forward
    npx wrangler secret put FORWARD_URL
    npx wrangler secret put FORWARD_TOKEN
+   # optional error reporting
+   npx wrangler secret put SENTRY_DSN
    ```
 
 3. Uncomment the `routes` custom-domain block in `wrangler.toml` once the DNS
