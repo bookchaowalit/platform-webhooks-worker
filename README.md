@@ -33,6 +33,16 @@ npm test
 npm run typecheck
 ```
 
+## State (2026-10-23)
+
+Deployed from this repository with the Infisical `/cloudflare` token (account that owns the
+`bookchaowalit.com` zone): R2 bucket `solo-empire-hooks` created, custom domain
+`hooks.bookchaowalit.com` bound, `SENTRY_DSN` set (Sentry project `platform-webhooks-worker`).
+`GET /healthz` answers 200 and the uptime Worker watches it. `STRIPE_WEBHOOK_SECRET` is **not set**,
+so `POST /stripe` answers `503` and accepts nothing: steps 1–2 below (Stripe endpoint and its
+signing secret) are still the owner's. Rollback: `npx wrangler rollback` to the previous version,
+or remove the `routes` block and deploy to unbind the domain.
+
 ## Owner deploy steps
 
 These steps need the owner's Cloudflare and Stripe access. Run them yourself;

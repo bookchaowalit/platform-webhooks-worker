@@ -3,14 +3,13 @@ main = "src/worker.ts"
 compatibility_date = "2026-10-04"
 # @sentry/cloudflare needs AsyncLocalStorage.
 compatibility_flags = ["nodejs_als"]
-account_id = "4a3ba0eee7dba5c9131a0d1ad3639114"
 workers_dev = true
 
-# Bind the custom domain only after the owner approves the DNS change
-# (infra/platform/domains.yaml entry hooks.bookchaowalit.com, status reserved).
-# routes = [
-#   { pattern = "hooks.bookchaowalit.com", custom_domain = true }
-# ]
+# The account comes from CLOUDFLARE_ACCOUNT_ID (Infisical /cloudflare), the account that owns the
+# bookchaowalit.com zone. Custom domain approved by the owner on 2026-10-23 (owner action checklist).
+routes = [
+  { pattern = "hooks.bookchaowalit.com", custom_domain = true }
+]
 
 # Raw signed events land here first (bronze layer).
 # The bucket must exist before deploy: wrangler r2 bucket create solo-empire-hooks
