@@ -33,15 +33,22 @@ npm test
 npm run typecheck
 ```
 
-## State (2026-10-23)
+## State (2026-10-24)
 
 Deployed from this repository with the Infisical `/cloudflare` token (account that owns the
-`bookchaowalit.com` zone): R2 bucket `solo-empire-hooks` created, custom domain
-`hooks.bookchaowalit.com` bound, `SENTRY_DSN` set (Sentry project `platform-webhooks-worker`).
-`GET /healthz` answers 200 and the uptime Worker watches it. `STRIPE_WEBHOOK_SECRET` is **not set**,
-so `POST /stripe` answers `503` and accepts nothing: steps 1–2 below (Stripe endpoint and its
-signing secret) are still the owner's. Rollback: `npx wrangler rollback` to the previous version,
-or remove the `routes` block and deploy to unbind the domain.
+`bookchaowalit.com` zone): R2 bucket `solo-empire-hooks`, custom domain `hooks.bookchaowalit.com`,
+`SENTRY_DSN` set (Sentry project `platform-webhooks-worker`), uptime Worker watches `/healthz`.
+
+Stripe (2026-10-24, live mode): endpoint `we_1UU0wgKKW2mNhAm655H3D0Za` →
+`https://hooks.bookchaowalit.com/stripe`, events `checkout.session.completed`,
+`payment_intent.succeeded`, `charge.refunded`. Its signing secret is in Infisical `/stripe`
+as `STRIPE_WEBHOOK_SECRET` and set as the Worker secret. Smoke: a self-signed synthetic event
+answered `200` and was written to `bronze/stripe/2026/10/24/` (object then deleted so it never
+counts as revenue); a bad signature answered `400`.
+
+Rollback: `npx wrangler secret delete STRIPE_WEBHOOK_SECRET` (route back to `503`), disable or
+delete the endpoint in Stripe (`POST /v1/webhook_endpoints/<id>` `disabled=true`), or
+`npx wrangler rollback` to the previous version.
 
 ## Owner deploy steps
 
