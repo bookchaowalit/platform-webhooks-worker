@@ -11,7 +11,7 @@ Current slice: **Stripe only**. LINE, GitHub, and iPaaS sources are future slice
 | Route | Behavior |
 |---|---|
 | `POST /stripe` | Verifies `Stripe-Signature` (`t=...,v1=...`, HMAC-SHA256 over `${t}.${rawBody}`, constant-time compare, 300 s tolerance). Invalid → `400`, without echoing the body. Valid → raw JSON written to `HOOKS_BUCKET` at `bronze/stripe/YYYY/MM/DD/<event.id>.json` (UTC date of `event.created`; the same id overwrites, so Stripe retries are idempotent), then `200 {"received":true}`. |
-| `GET /healthz` | `200 {"ok":true}` |
+| `GET /healthz` | `200 {"ok":true,"dlq_backlog":0}`; `503` while `hooks-inbound-dlq` holds messages (the uptime Worker alerts) |
 | anything else | `404` (`405` for non-POST `/stripe`) |
 
 - Body limit: 256 KB (`413` above it).

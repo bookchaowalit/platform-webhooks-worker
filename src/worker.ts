@@ -11,11 +11,13 @@ export interface R2BucketLike {
 
 export interface QueueLike {
   send(body: unknown, options?: { contentType?: 'json' }): Promise<unknown>;
+  metrics?(): Promise<{ backlogCount: number }>;
 }
 
 export interface Env {
   HOOKS_BUCKET: R2BucketLike;
   HOOKS_QUEUE?: QueueLike;
+  HOOKS_DLQ?: QueueLike;
   STRIPE_WEBHOOK_SECRET?: string;
   FORWARD_URL?: string;
   FORWARD_TOKEN?: string;
@@ -230,9 +232,22 @@ async function handleStripe(request: Request, env: Env, ctx: ExecutionContextLik
   return json({ received: true });
 }
 
+// A parked event means a failed forward: answer 503 so the uptime Worker alerts on Telegram.
+async function handleHealth(env: Env): Promise<Response> {
+  if (!env.HOOKS_DLQ?.metrics) return json({ ok: true });
+  let backlog: number | null = null;
+  try {
+    backlog = (await env.HOOKS_DLQ.metrics()).backlogCount;
+  } catch {
+    backlog = null;
+  }
+  if (backlog !== null && backlog > 0) return json({ ok: false, dlq_backlog: backlog }, 503);
+  return json({ ok: true, dlq_backlog: backlog });
+}
+
 export async function handleRequest(request: Request, env: Env, ctx: ExecutionContextLike, nowSeconds?: number): Promise<Response> {
   const { pathname } = new URL(request.url);
-  if (pathname === '/healthz' && request.method === 'GET') return json({ ok: true });
+  if (pathname === '/healthz' && request.method === 'GET') return handleHealth(env);
   if (pathname === '/stripe') {
     if (request.method !== 'POST') return reject(405, 'method_not_allowed');
     return handleStripe(request, env, ctx, nowSeconds);

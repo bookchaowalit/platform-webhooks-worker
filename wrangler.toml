@@ -23,6 +23,11 @@ bucket_name = "solo-empire-hooks"
 binding = "HOOKS_QUEUE"
 queue = "hooks-inbound"
 
+# Bound only to read the DLQ backlog for /healthz.
+[[queues.producers]]
+binding = "HOOKS_DLQ"
+queue = "hooks-inbound-dlq"
+
 [[queues.consumers]]
 queue = "hooks-inbound"
 max_batch_size = 10

@@ -103,3 +103,12 @@ test('consumer acks without a call when no forward target is configured', async 
   await handleQueue({ queue: 'hooks-inbound', messages: [m] }, env);
   assert.equal(state.acked, true);
 });
+
+test('/healthz answers 503 while hooks-inbound-dlq holds parked events', async () => {
+  const dlq = (n: number) => ({ async send() { return null; }, async metrics() { return { backlogCount: n }; } });
+  const ok = await handleRequest(new Request('https://hooks.example.com/healthz'), makeEnv({ HOOKS_DLQ: dlq(0) }).env, { waitUntil() {} });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { ok: true, dlq_backlog: 0 });
+  const bad = await handleRequest(new Request('https://hooks.example.com/healthz'), makeEnv({ HOOKS_DLQ: dlq(1) }).env, { waitUntil() {} });
+  assert.equal(bad.status, 503);
+});
