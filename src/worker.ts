@@ -1,5 +1,6 @@
 // Signed inbound webhook receiver for hooks.bookchaowalit.com.
-// Slice: Stripe only. Raw events land in R2 (bronze) before anything else.
+// Slice: Stripe only. Raw events land in R2 (bronze) before anything else, then go to the
+// hooks-inbound queue (ADR-0008), whose consumer below forwards them with retries and a DLQ.
 
 import * as Sentry from '@sentry/cloudflare';
 import { sentryOptions } from './sentry.js';
@@ -8,8 +9,13 @@ export interface R2BucketLike {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
 }
 
+export interface QueueLike {
+  send(body: unknown, options?: { contentType?: 'json' }): Promise<unknown>;
+}
+
 export interface Env {
   HOOKS_BUCKET: R2BucketLike;
+  HOOKS_QUEUE?: QueueLike;
   STRIPE_WEBHOOK_SECRET?: string;
   FORWARD_URL?: string;
   FORWARD_TOKEN?: string;
@@ -119,6 +125,64 @@ async function readLimitedBody(request: Request): Promise<string | null> {
   return new TextDecoder().decode(buffer);
 }
 
+// ADR-0008 envelope. `id` reuses the Stripe event id, so consumers dedupe on it.
+export function envelope(event: StripeEvent) {
+  return {
+    id: event.id,
+    type: `stripe.${event.type}`,
+    version: 1,
+    occurred_at: new Date(event.created * 1000).toISOString(),
+    producer: 'hooks-worker',
+    correlation_id: event.id,
+    causation_id: null,
+    data: summarize(event),
+  };
+}
+
+export type Envelope = ReturnType<typeof envelope>;
+
+export const RETRY_DELAY_SECONDS = 30;
+
+export interface MessageLike<T> {
+  readonly id: string;
+  readonly body: T;
+  readonly attempts: number;
+  ack(): void;
+  retry(options?: { delaySeconds?: number }): void;
+}
+
+export interface MessageBatchLike<T> {
+  readonly queue: string;
+  readonly messages: readonly MessageLike<T>[];
+}
+
+// Queue consumer: forward each envelope; a non-2xx answer or a network error is retried with
+// growing delay, and after max_retries (wrangler.toml) the message moves to hooks-inbound-dlq.
+export async function handleQueue(batch: MessageBatchLike<Envelope>, env: Env): Promise<void> {
+  for (const message of batch.messages) {
+    if (!env.FORWARD_URL || !env.FORWARD_TOKEN) {
+      // No target configured: the raw event is durable in R2, nothing else to deliver.
+      message.ack();
+      continue;
+    }
+    try {
+      const res = await fetch(env.FORWARD_URL, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${env.FORWARD_TOKEN}`,
+          'content-type': 'application/json',
+          'idempotency-key': message.body.id,
+        },
+        body: JSON.stringify(message.body),
+      });
+      if (res.ok) message.ack();
+      else message.retry({ delaySeconds: RETRY_DELAY_SECONDS * message.attempts });
+    } catch {
+      message.retry({ delaySeconds: RETRY_DELAY_SECONDS * message.attempts });
+    }
+  }
+}
+
 async function forward(env: Env, summary: ReturnType<typeof summarize>): Promise<void> {
   try {
     await fetch(env.FORWARD_URL as string, {
@@ -153,7 +217,16 @@ async function handleStripe(request: Request, env: Env, ctx: ExecutionContextLik
     httpMetadata: { contentType: 'application/json' },
   });
 
-  if (env.FORWARD_URL && env.FORWARD_TOKEN) ctx.waitUntil(forward(env, summarize(event)));
+  if (env.HOOKS_QUEUE) {
+    try {
+      await env.HOOKS_QUEUE.send(envelope(event), { contentType: 'json' });
+    } catch {
+      // Stripe retries a non-2xx; the R2 write above is idempotent per event id.
+      return reject(503, 'queue_unavailable');
+    }
+  } else if (env.FORWARD_URL && env.FORWARD_TOKEN) {
+    ctx.waitUntil(forward(env, summarize(event)));
+  }
   return json({ received: true });
 }
 
@@ -171,5 +244,8 @@ export async function handleRequest(request: Request, env: Env, ctx: ExecutionCo
 export default Sentry.withSentry((env: Env) => sentryOptions(env), {
   fetch(request: Request, env: Env, ctx: ExecutionContextLike): Promise<Response> {
     return handleRequest(request, env, ctx);
+  },
+  queue(batch: MessageBatchLike<Envelope>, env: Env): Promise<void> {
+    return handleQueue(batch, env);
   },
 });

@@ -19,10 +19,18 @@ Current slice: **Stripe only**. LINE, GitHub, and iPaaS sources are future slice
 - Errors: when the `SENTRY_DSN` secret is set, uncaught errors go to Sentry
   (`@sentry/cloudflare`, errors only: no tracing, breadcrumbs, request, headers,
   body or user; see `src/sentry.ts`). Unset = off.
-- Optional forward: when both `FORWARD_URL` and `FORWARD_TOKEN` are set, a
-  minimal summary `{id,type,amount,currency,created,livemode,payment_link}` is
-  POSTed with a bearer credential through `ctx.waitUntil`. It is best effort and never
-  delays or changes the `200`; the raw event in R2 remains the source of truth.
+- Queue (ADR-0008): after the R2 write the Worker sends an envelope
+  `{id,type:"stripe.<type>",version,occurred_at,producer,correlation_id,causation_id,data}`
+  to the Cloudflare Queue `hooks-inbound`; `data` is the minimal summary
+  `{id,type,amount,currency,created,livemode,payment_link}` (no emails or names). If the
+  queue send fails the answer is `503`, so Stripe retries (the R2 write is idempotent).
+- Consumer: the same Worker consumes `hooks-inbound`. With `FORWARD_URL` and
+  `FORWARD_TOKEN` set it POSTs the envelope with a bearer credential and an
+  `idempotency-key` header (= event id); a non-2xx or network error is retried after
+  30 s × attempt, and after 5 retries the message moves to `hooks-inbound-dlq`. Without a
+  target it acks (the raw event in R2 is the source of truth).
+- Without the `HOOKS_QUEUE` binding (local tests) the old best-effort `ctx.waitUntil`
+  forward of the summary is used.
 
 ## Local checks
 
@@ -49,6 +57,12 @@ counts as revenue); a bad signature answered `400`.
 Rollback: `npx wrangler secret delete STRIPE_WEBHOOK_SECRET` (route back to `503`), disable or
 delete the endpoint in Stripe (`POST /v1/webhook_endpoints/<id>` `disabled=true`), or
 `npx wrangler rollback` to the previous version.
+
+Queue (2026-11-03, ADR-0008 M1): queues `hooks-inbound` and `hooks-inbound-dlq` created; the
+Worker is producer and consumer (version `380307d1`). Smoke: synthetic signed event → `200`,
+R2 object written, `wrangler tail` showed the queue batch consumed `ok`; object deleted
+afterwards. No `FORWARD_URL` is set yet, so the consumer acks; the payment cell's ingest
+endpoint becomes the target when it is ready.
 
 ## Owner deploy steps
 

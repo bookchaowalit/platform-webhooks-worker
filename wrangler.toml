@@ -17,8 +17,21 @@ routes = [
 binding = "HOOKS_BUCKET"
 bucket_name = "solo-empire-hooks"
 
+# ADR-0008 queue plane. Created once with:
+#   wrangler queues create hooks-inbound && wrangler queues create hooks-inbound-dlq
+[[queues.producers]]
+binding = "HOOKS_QUEUE"
+queue = "hooks-inbound"
+
+[[queues.consumers]]
+queue = "hooks-inbound"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "hooks-inbound-dlq"
+
 # Worker secrets are never stored in this file; set them with `wrangler secret put`:
 #   STRIPE_WEBHOOK_SECRET  required, Stripe endpoint signing secret
-#   FORWARD_URL            optional, receiver for minimal event summaries
+#   FORWARD_URL            optional, receiver for ADR-0008 envelopes (data = minimal event summary)
 #   FORWARD_TOKEN          optional, bearer credential for FORWARD_URL
 #   SENTRY_DSN             optional, error reporting (unset = off; errors only, see src/sentry.ts)
