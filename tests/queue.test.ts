@@ -80,6 +80,7 @@ test('consumer forwards the envelope with an idempotency key and acks on 2xx', a
   const headers = calls[0].init.headers as Record<string, string>;
   assert.equal(headers['idempotency-key'], 'evt_1QueueABC');
   assert.equal(headers.authorization, `Bearer ${forwardCredential}`);
+  assert.ok(calls[0].init.signal instanceof AbortSignal, 'forward is bounded by a timeout');
 });
 
 test('consumer retries with growing delay on a non-2xx answer or a network error', async () => {

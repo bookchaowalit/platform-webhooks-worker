@@ -144,6 +144,7 @@ export function envelope(event: StripeEvent) {
 export type Envelope = ReturnType<typeof envelope>;
 
 export const RETRY_DELAY_SECONDS = 30;
+export const FORWARD_TIMEOUT_MS = 10_000;
 
 export interface MessageLike<T> {
   readonly id: string;
@@ -176,6 +177,8 @@ export async function handleQueue(batch: MessageBatchLike<Envelope>, env: Env): 
           'idempotency-key': message.body.id,
         },
         body: JSON.stringify(message.body),
+        // A hung target must not hold the whole batch until the consumer's wall-time limit.
+        signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
       });
       if (res.ok) message.ack();
       else message.retry({ delaySeconds: RETRY_DELAY_SECONDS * message.attempts });
