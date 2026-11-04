@@ -3,7 +3,8 @@ main = "src/worker.ts"
 compatibility_date = "2026-10-04"
 # @sentry/cloudflare needs AsyncLocalStorage.
 compatibility_flags = ["nodejs_als"]
-workers_dev = true
+# Off since 2026-11-04 (network NET-10): Stripe and every caller use the custom domain below.
+workers_dev = false
 
 # The account comes from CLOUDFLARE_ACCOUNT_ID (Infisical /cloudflare), the account that owns the
 # bookchaowalit.com zone. Custom domain approved by the owner on 2026-10-23 (owner action checklist).
