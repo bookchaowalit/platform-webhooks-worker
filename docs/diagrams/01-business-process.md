@@ -2,6 +2,8 @@
 
 repo นี้คือ Cloudflare Worker `solo-empire-hooks` บน `hooks.bookchaowalit.com` ทำหน้าที่รับ signed inbound webhook จาก Stripe (slice เดียวตอนนี้) แล้วเขียน raw event ลง R2 ก่อนทำอย่างอื่น จากนั้นส่ง envelope เข้า Cloudflare Queue `hooks-inbound` ตาม ADR-0008 M1 ไม่มี end user — caller มีแค่ Stripe และ uptime Worker
 
+Last reviewed: 2026-11-27 · commit `d82df34`
+
 ## As-Is (จาก code วันนี้)
 
 ```mermaid
@@ -43,6 +45,15 @@ flowchart LR
 ```
 
 Sources: `README.md` (Queue section: "the payment cell's ingest endpoint becomes the target when it is ready"; "LINE, GitHub, and iPaaS sources are future slices"), `PRODUCT.md` ("Out of scope today"), [ADR-0008](https://github.com/bookchaowalit/architecture-docs/blob/main/docs/architecture/decisions/ADR-0008-messaging-queue-and-event-broker.md) (rollout M3/M4)
+
+## Gap
+
+| ID | As-Is → To-Be | Status | Owner | Evidence |
+|---|---|---|---|---|
+| G1 | consumer acks every message (`FORWARD_URL`/`FORWARD_TOKEN` unset) → consumer forwards the envelope to the payment cell ingest endpoint | blocked | owner | `README.md` "Queue (2026-11-03)": waits for the payment cell ingest endpoint; `src/worker.ts` consumer branch when unset |
+| G2 | payment cell outbox → Kafka `commerce.events.v1` → lake sink to R2 bronze/stream not fed from this Worker → wired end to end from the hooks queue | todo | claude | ADR-0008 rollout M3/M4; depends on G1 [ต้องยืนยัน] whether another path already feeds it |
+| G3 | Stripe only → LINE, GitHub and iPaaS source slices | decide | owner | `README.md` ("future slices"); no written order or date |
+| G4 | R2 vs Stripe Dashboard reconcile done by hand → automated job | decide | owner | `PRODUCT.md` "Success measures"; no job in the repo |
 
 ## Open questions
 - payment cell ingest endpoint จะเป็น URL ไหน และใครเป็นเจ้าของ `FORWARD_TOKEN`? (README บอกแค่ "when it is ready")
